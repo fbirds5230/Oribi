@@ -61,6 +61,7 @@ class ProfileOptions:
 
 
 def _profile_index(df: pd.DataFrame) -> IndexContext | None:
+    """Measure index labels, comparing unhashable object labels by value."""
     index = df.index
     default = isinstance(index, pd.RangeIndex) and index.name is None and index.start == 0 and index.step == 1
     if default:
@@ -76,6 +77,12 @@ def _profile_index(df: pd.DataFrame) -> IndexContext | None:
     try:
         unique = int(index.nunique()) if index.nlevels == 1 else int(len(index.unique()))
     except (TypeError, ValueError):
+        if index.nlevels == 1 and pd.api.types.is_object_dtype(index.dtype):
+            # Series can compare unhashable labels without the Index's hash table.
+            distinct = index_frame.iloc[:, 0].drop_duplicates()
+            unique = int(distinct.notna().sum())
+            duplicates = len(index) - len(distinct)
+            return IndexContext(names, dtypes, 1, unique, duplicates, missing, duplicates == 0)
         unique = int(len(index.drop_duplicates()))
     # unique_count leaves missing entries out for a single-level index, so
     # len(index) - unique would count each missing entry as a duplicate.
